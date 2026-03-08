@@ -1,0 +1,18 @@
+{
+  "name": "StepLog · Occupancy",
+  "short_name": "StepLog",
+  "description": "Real-time space availability — find your spot before you arrive.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#03050d",
+  "theme_color": "#03050d",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
