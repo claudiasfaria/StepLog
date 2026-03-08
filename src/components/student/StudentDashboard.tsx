@@ -31,6 +31,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
   const [isLoading, setIsLoading]           = useState(false);
   const [searchQuery, setSearchQuery]       = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [showLibraryRooms, setShowLibraryRooms] = useState(false);
 
   // Seed local zones state once API data arrives
   useEffect(() => {
@@ -82,14 +83,34 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     { id: "service", label: "Museus & Cultura",   emoji: "🏛️" },
   ];
 
-  // Filter zones by search + category (only active for public view)
-  const visibleZones = isPublic
-    ? zones.filter(z => {
-        const matchCat   = !activeCategory || z.category === activeCategory;
-        const matchQuery = !searchQuery || z.name.toLowerCase().includes(searchQuery.toLowerCase());
-        return matchCat && matchQuery;
-      })
-    : zones;
+  // Indoor *-p* zones are only shown inside the building view — never in the card list
+  const outdoorZones = zones.filter(z => !/(?:dl|fct)-p\d/.test(z.id));
+
+  // Collect FCT library indoor rooms and group by floor level for the Biblioteca card
+  const libraryFloors = zones.filter(z => /fct-p\d/.test(z.id));
+  const FLOOR_LABEL: Record<number, string> = { 0: "P-1", 1: "P0", 2: "P1", 3: "P2" };
+  const libraryFloorSummary = (() => {
+    const grouped: Record<number, ZoneData[]> = {};
+    libraryFloors.forEach(z => {
+      const m = z.id.match(/fct-p(\d+)-/);
+      const lvl = m ? parseInt(m[1]) : 0;
+      if (!grouped[lvl]) grouped[lvl] = [];
+      grouped[lvl].push(z);
+    });
+    return Object.entries(grouped)
+      .sort(([a], [b]) => parseInt(a) - parseInt(b))
+      .map(([lvl, zs]) => ({
+        label: FLOOR_LABEL[parseInt(lvl)] ?? `P${lvl}`,
+        pct: Math.round(zs.reduce((s, z) => s + getOccupancyPercent(z), 0) / zs.length),
+      }));
+  })();
+
+  // Always filter by search + category
+  const visibleZones = outdoorZones.filter(z => {
+    const matchCat   = !activeCategory || z.category === activeCategory;
+    const matchQuery = !searchQuery || z.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchCat && matchQuery;
+  });
 
   const refresh = () => {
     setIsLoading(true);
@@ -119,14 +140,14 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
       </header>
 
       {/* ══ MAP TAB ══ */}
-      <div style={{ flex: 1, display: activeTab === "map" ? "flex" : "none", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ flex: 1, display: activeTab === "map" ? "flex" : "none", flexDirection: "column", overflow: "hidden", gap: 0 }}>
 
           {/* 3D MAP — grows to fill available space above cards */}
-          <div style={{ flex: 1, position: "relative", background: "rgba(3,5,13,0.6)", minHeight: 160, overflow: "hidden" }}>
-            <Map zones={visibleZones} selectedZoneId={selectedZoneId} flyToZone={selectedZone} mapConfig={mapConfig} onZoneClick={handleZoneClick} />
+          <div style={{ flex: 1, position: "relative", background: "rgba(3,5,13,0.6)", minHeight: 160, overflow: "hidden", outline: "none", border: "none", marginBottom: -1, paddingBottom: 1 }}>
+            <Map zones={zones} selectedZoneId={selectedZoneId} flyToZone={selectedZone} mapConfig={mapConfig} onZoneClick={handleZoneClick} onMapClick={() => setSelectedZoneId(null)} />
 
             {/* Gradient fade at bottom — blends map into zone cards */}
-            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 48, background: "linear-gradient(to bottom, transparent, var(--bg, #0a0a14))", zIndex: 4, pointerEvents: "none" }} />
+            <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 72, background: "linear-gradient(to bottom, transparent, var(--bg, #0a0a14))", zIndex: 4, pointerEvents: "none" }} />
 
             {/* Top-left badge */}
             <div className="glass" style={{ position: "absolute", top: 12, left: 12, borderRadius: 8, padding: "5px 10px", display: "flex", alignItems: "center", gap: 6, zIndex: 5 }}>
@@ -147,7 +168,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
           </div>
 
           {/* ── Bottom overlay: selected zone + cards ── */}
-          <div style={{ flexShrink: 0 }}>
+          <div style={{ flexShrink: 0, background: "var(--bg, #0a0a14)" }}>
 
           {/* Selected zone — expanded detail panel */}
           {selectedZone && (() => {
@@ -287,20 +308,100 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
           {/* ZONE CARDS */}
           <div style={{ flexShrink: 0, padding: "16px 16px 16px", display: "flex", flexDirection: "column", gap: 6, background: "var(--bg, #0a0a14)" }}>
-            {/* Zone cards */}
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 6 }}>
-                <Icon d={ICONS.wifi} size={13} style={{ color: "var(--muted)" }} />
-                <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13 }}>Live Zones</span>
+            {showLibraryRooms ? (
+              /* ── Library rooms drill-down ── */
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                  <button
+                    onClick={() => { setShowLibraryRooms(false); setSelectedZoneId(null); }}
+                    style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: "0 4px 0 0", display: "flex", alignItems: "center" }}
+                  >←</button>
+                  <Icon d={ICONS.wifi} size={13} style={{ color: "var(--muted)" }} />
+                  <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13 }}>Biblioteca – Salas</span>
+                </div>
+                <div className="scroll-x" style={{ paddingTop: 6, paddingBottom: 6 }}>
+                  {libraryFloors.map(room => (
+                    <div key={room.id} ref={el => { zoneRefs.current[room.id] = el; }}>
+                      <ZoneCard
+                        zone={room}
+                        isSelected={room.id === selectedZoneId}
+                        onClick={() => handleZoneClick(room)}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="scroll-x" style={{ paddingTop: 6, paddingBottom: 6 }}>
-                {visibleZones.map(zone => (
-                  <div key={zone.id} ref={el => { zoneRefs.current[zone.id] = el; }}>
-                    <ZoneCard zone={zone} isSelected={zone.id === selectedZoneId} onClick={() => handleZoneClick(zone)} />
-                  </div>
-                ))}
+            ) : (
+              /* ── Normal zones view ── */
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                  <Icon d={ICONS.wifi} size={13} style={{ color: "var(--muted)" }} />
+                  <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 13 }}>Live Zones</span>
+                </div>
+
+                {/* Search bar */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "7px 10px", background: "rgba(255,255,255,0.03)" }}>
+                  <span style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1 }}>🔍</span>
+                  <input
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Pesquisar zona..."
+                    style={{ flex: 1, background: "none", border: "none", outline: "none", color: "var(--text)", fontSize: 12, fontFamily: "var(--font-mono)" }}
+                  />
+                  {searchQuery && (
+                    <button onClick={() => setSearchQuery("")} style={{ background: "none", border: "none", color: "var(--muted)", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>×</button>
+                  )}
+                </div>
+
+                {/* Category filter pills */}
+                <div style={{ display: "flex", gap: 5, marginBottom: 8, overflowX: "auto" }}>
+                  {([null, "food", "study", "sport", "service"] as (string | null)[]).map(cat => {
+                    const META: Record<string, { emoji: string; label: string }> = {
+                      food:    { emoji: "🍽️", label: "Comer"    },
+                      study:   { emoji: "📚", label: "Estudar"  },
+                      sport:   { emoji: "⚽", label: "Desporto" },
+                      service: { emoji: "🏛️", label: "Serviços" },
+                    };
+                    const isActive = activeCategory === cat;
+                    return (
+                      <button
+                        key={String(cat)}
+                        onClick={() => setActiveCategory(cat === null || isActive ? null : cat)}
+                        style={{
+                          flexShrink: 0, padding: "4px 10px", borderRadius: 20,
+                          fontSize: 10, fontFamily: "var(--font-mono)", cursor: "pointer",
+                          border: `1px solid ${isActive && cat !== null ? "var(--green)" : "rgba(255,255,255,0.1)"}`,
+                          background: isActive && cat !== null ? "rgba(0,220,130,0.12)" : "rgba(255,255,255,0.03)",
+                          color: isActive && cat !== null ? "var(--green)" : "var(--muted)",
+                          display: "flex", alignItems: "center", gap: 4,
+                        }}
+                      >
+                        {cat === null ? <>⬡ Tudo</> : <>{META[cat].emoji} {META[cat].label}</>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="scroll-x" style={{ paddingTop: 6, paddingBottom: 6 }}>
+                  {visibleZones.map(zone => (
+                    <div key={zone.id} ref={el => { zoneRefs.current[zone.id] = el; }}>
+                      <ZoneCard
+                        zone={zone}
+                        isSelected={zone.id === selectedZoneId}
+                        onClick={() => {
+                          if (zone.id === "library") {
+                            setShowLibraryRooms(true);
+                            handleZoneClick(zone);
+                          } else {
+                            handleZoneClick(zone);
+                          }
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
           </div>{/* end bottom overlay */}
       </div>

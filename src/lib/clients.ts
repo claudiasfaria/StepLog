@@ -7,13 +7,18 @@ export interface CampusMapConfig {
   pitch?:    number;
   bearing?:  number;
   bounds: { minLng: number; maxLng: number; minLat: number; maxLat: number };
+  buildingGeoJSON?: string; // path served from public/, e.g. "/building-ed4.geojson"
+  buildingLng?: number;     // building center if different from campus camera center
+  buildingLat?: number;
 }
 
 /** Map view + bounds for each campus/enterprise id */
 export const CAMPUS_MAP_CONFIG: Record<string, CampusMapConfig> = {
-  // FCT NOVA — Caparica
-  fct:  { longitude: -9.2057, latitude: 38.6612, zoom: 17, pitch: 60, bearing: -20,
-          bounds: { minLng: -9.2110, maxLng: -9.2000, minLat: 38.6580, maxLat: 38.6650 } },
+  // FCT NOVA — Caparica (indoor: Biblioteca FCT/UNL)
+  fct:  { longitude: -9.2057, latitude: 38.6612, zoom: 16.5, pitch: 60, bearing: -20,
+          bounds: { minLng: -9.2110, maxLng: -9.2000, minLat: 38.6580, maxLat: 38.6670 },
+          buildingGeoJSON: "/building-fct.geojson",
+          buildingLng: -9.205325, buildingLat: 38.662712 },
   // Nova SBE — Carcavelos (campus + praia)
   sbe:  { longitude: -9.325923, latitude: 38.678768, zoom: 16.5, pitch: 55, bearing: 10, 
     bounds: { minLng: -9.3420, maxLng: -9.3180, minLat: 38.6710, maxLat: 38.6830 } 
@@ -21,6 +26,10 @@ export const CAMPUS_MAP_CONFIG: Record<string, CampusMapConfig> = {
   // Deloitte — Lagoas Park, Oeiras
   Deloitte: { longitude: -9.3085, latitude: 38.7148, zoom: 17, pitch: 45, bearing: 0,
                   bounds: { minLng: -9.3140, maxLng: -9.3020, minLat: 38.7110, maxLat: 38.7195 } },
+  // Edifício 4 Demo — coordenadas reais do GeoJSON (centro do polígono shell)
+  ed4: { longitude: -9.30627, latitude: 38.71547, zoom: 17.5, pitch: 52, bearing: -10,
+         bounds: { minLng: -9.3140, maxLng: -9.2990, minLat: 38.7100, maxLat: 38.7210 },
+         buildingGeoJSON: "/building-ed4.geojson" },
   // Accenture — Lagoas Park, Porto Salvo
   Accenture: { longitude: -9.3018, latitude: 38.7095, zoom: 17, pitch: 45, bearing: 5,
                bounds: { minLng: -9.3080, maxLng: -9.2960, minLat: 38.7060, maxLat: 38.7135 } },
@@ -49,6 +58,8 @@ export const ADMIN_EMAILS: string[] = [
   "admin@deloitte.pt",
   // Accenture
   "admin@accenture.pt",
+  // Edifício 4 Demo
+  "admin@ed4.demo",
 ];
 
 export const CAMPUSES: CampusConfig[] = [

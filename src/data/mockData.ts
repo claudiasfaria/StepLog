@@ -10,7 +10,7 @@ export const CATEGORY_EMOJI: Record<string, string> = {
   lab:     "🔬",
   health:  "🏥",
 };
-/*
+
 function generateTrend(base: number) {
   return Array.from({ length: 12 }, (_, i) => ({
     time: `${i * 15}m`,
@@ -33,6 +33,21 @@ export const FCT_ZONES: ZoneData[] = [
   { id: "admin",       name: "Serv. Académicos",    shortName: "SA",        category: "service", floor: "1F",      capacity:  30, currentOccupancy:  24, wifiConnections:  48, cvCount:  22, waitTime: 15, isOpen: true,  historicalPeak:  60, coordinates: { x: 50, y: 18, radius:  7 }, lng: -9.2059, lat: 38.6623, trend: generateTrend(80) },
   ];
 
+// ── FCT Biblioteca Indoor (building-fct.geojson zone IDs) ──────────────────
+const FCT_LIBRARY_ZONES: ZoneData[] = [
+  // Piso 0
+  { id: "fct-p0-lobby",  name: "Lobby Entrada",        shortName: "Lobby",    category: "service", floor: "0F", capacity:  50, currentOccupancy:  10, wifiConnections:  30, cvCount:  9, waitTime: 0, isOpen: true,  historicalPeak:  80, coordinates: { x: 50, y: 80, radius: 10 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(20) },
+  { id: "fct-p0-mesas",  name: "Zona de Mesas",        shortName: "Mesas",    category: "study",   floor: "0F", capacity:  80, currentOccupancy:  36, wifiConnections:  65, cvCount: 33, waitTime: 0, isOpen: true,  historicalPeak: 120, coordinates: { x: 50, y: 60, radius: 11 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(45) },
+  // Piso 1
+  { id: "fct-p1-meio",   name: "Sala Leitura Central", shortName: "Leitura",  category: "study",   floor: "1F", capacity: 120, currentOccupancy: 102, wifiConnections: 180, cvCount: 95, waitTime: 0, isOpen: true,  historicalPeak: 200, coordinates: { x: 50, y: 50, radius: 13 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(85) },
+  { id: "fct-p1-dir-a",  name: "Sala Estudo A",        shortName: "Est. A",   category: "study",   floor: "1F", capacity:  60, currentOccupancy:  36, wifiConnections:  85, cvCount: 33, waitTime: 0, isOpen: true,  historicalPeak:  90, coordinates: { x: 70, y: 30, radius: 10 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(60) },
+  { id: "fct-p1-dir-b",  name: "Sala Estudo B",        shortName: "Est. B",   category: "study",   floor: "1F", capacity:  60, currentOccupancy:  57, wifiConnections:  90, cvCount: 54, waitTime: 0, isOpen: true,  historicalPeak:  90, coordinates: { x: 70, y: 55, radius: 10 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(95) },
+  // Piso 2
+  { id: "fct-p2-esq",    name: "Sala Esquerda",        shortName: "Esq.",     category: "study",   floor: "2F", capacity:  40, currentOccupancy:  12, wifiConnections:  30, cvCount: 11, waitTime: 0, isOpen: true,  historicalPeak:  60, coordinates: { x: 25, y: 50, radius:  9 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(30) },
+  { id: "fct-p2-meio",   name: "Sala Centro P2",       shortName: "Centro P2",category: "study",   floor: "2F", capacity:  80, currentOccupancy:  70, wifiConnections: 110, cvCount: 67, waitTime: 0, isOpen: true,  historicalPeak: 120, coordinates: { x: 50, y: 50, radius: 11 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(88) },
+  { id: "fct-p2-dir",    name: "Sala Direita P2",      shortName: "Dir. P2",  category: "study",   floor: "2F", capacity:  80, currentOccupancy:  32, wifiConnections:  70, cvCount: 30, waitTime: 0, isOpen: true,  historicalPeak: 120, coordinates: { x: 70, y: 50, radius: 11 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(40) },
+];
+
 // ── Nova SBE (Carcavelos) ───────────────────────────────────────────────────
 const SBE_ZONES: ZoneData[] = [
   // Cantina — Hovione Atrium, preços sociais
@@ -48,13 +63,35 @@ const SBE_ZONES: ZoneData[] = [
 // ── Deloitte (Edifício 4, Lagoas Park) ─────────────────────────────────────
 const DELOITTE_ZONES: ZoneData[] = [
   // Restaurante interno Edifício 4 — cantina de empresa
-  { id: "dl-canteen",  name: "Cantina Edifício 4",   shortName: "Cantina",   category: "food",    floor: "Ground",  capacity: 180, currentOccupancy: 130, wifiConnections: 360, cvCount: 120, waitTime:  7, isOpen: true, historicalPeak: 300, coordinates: { x: 30, y: 65, radius: 12 }, lng: -9.3082, lat: 38.71465, trend: generateTrend(72) },
+  { id: "dl-canteen",  name: "Cantina Edifício 4",   shortName: "Cantina",   category: "food",    floor: "Ground",  capacity: 180, currentOccupancy: 130, wifiConnections: 360, cvCount: 120, waitTime:  7, isOpen: true, historicalPeak: 300, coordinates: { x: 30, y: 65, radius: 12 }, lng: -9.30627, lat: 38.71547, trend: generateTrend(72) },
   // Solinca Health Club — partilhado Lagoas Park, Edifício Lt 6
   { id: "dl-gym",      name: "Solinca Health Club",  shortName: "Solinca",   category: "sport",   floor: "Ground",  capacity: 150, currentOccupancy:  55, wifiConnections: 130, cvCount:  50, waitTime:  0, isOpen: true, historicalPeak: 250, coordinates: { x: 55, y: 70, radius: 11 }, lng: -9.3081, lat: 38.7145, trend: generateTrend(37) },
   // Centro de Congressos — auditório 600 pessoas + salas de reunião
   { id: "dl-congress", name: "Centro de Congressos", shortName: "Congressos",category: "service", floor: "Ground",  capacity: 600, currentOccupancy: 120, wifiConnections: 300, cvCount: 110, waitTime:  0, isOpen: true, historicalPeak: 900, coordinates: { x: 60, y: 30, radius: 14 }, lng: -9.3094, lat: 38.7152, trend: generateTrend(20) },
   // Innovation Lab — Edifício 4, piso 3
-  { id: "dl-lab",      name: "Innovation Lab",       shortName: "iLab",      category: "service", floor: "3F",      capacity:  50, currentOccupancy:  28, wifiConnections:  90, cvCount:  25, waitTime:  0, isOpen: true, historicalPeak:  80, coordinates: { x: 50, y: 45, radius:  8 }, lng: -9.3082, lat: 38.7145, trend: generateTrend(56) },
+  { id: "dl-lab",      name: "Innovation Lab",       shortName: "iLab",      category: "service", floor: "3F",      capacity:  50, currentOccupancy:  28, wifiConnections:  90, cvCount:  25, waitTime:  0, isOpen: true, historicalPeak:  80, coordinates: { x: 50, y: 45, radius:  8 }, lng: -9.30627, lat: 38.71547, trend: generateTrend(56) },
+  { id: "dl-p4-lobby",  name: "Coffee Lobby",   shortName: "Lobby",    category: "food",    floor: "4F", capacity:  40, currentOccupancy: 22, wifiConnections:  55, cvCount: 20, waitTime: 0, isOpen: true, historicalPeak:  60, coordinates: { x: 50, y: 50, radius: 15 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(55) },
+  // Piso 0 — Entrada + Cantina
+  { id: "dl-p0-entrance", name: "Lobby Entrada",   shortName: "Lobby",   category: "service", floor: "0F", capacity: 60,  currentOccupancy: 35, wifiConnections: 80,  cvCount: 32, waitTime: 0, isOpen: true,  historicalPeak: 90,  coordinates: { x: 50, y: 80, radius: 10 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(58) },
+  { id: "dl-p0-canteen",  name: "Cantina",          shortName: "Cantina", category: "food",    floor: "0F", capacity: 180, currentOccupancy: 130,wifiConnections: 360, cvCount: 120,waitTime: 7, isOpen: true,  historicalPeak: 300, coordinates: { x: 25, y: 55, radius: 12 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(72) },
+  { id: "dl-p0-cafe",     name: "Café Bar",          shortName: "Café",    category: "food",    floor: "0F", capacity: 40,  currentOccupancy: 28, wifiConnections: 60,  cvCount: 25, waitTime: 3, isOpen: true,  historicalPeak: 60,  coordinates: { x: 75, y: 55, radius: 8  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(70) },
+
+  // Piso 1 — Open Space
+  { id: "dl-p1-open",     name: "Open Space",        shortName: "Open",    category: "study",   floor: "1F", capacity: 200, currentOccupancy: 155,wifiConnections: 310, cvCount: 145,waitTime: 0, isOpen: true,  historicalPeak: 350, coordinates: { x: 50, y: 45, radius: 13 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(77) },
+  { id: "dl-p1-phone-a",  name: "Phone Booth A",     shortName: "Ph. A",   category: "service", floor: "1F", capacity: 2,   currentOccupancy: 1,  wifiConnections: 2,   cvCount: 1,  waitTime: 0, isOpen: true,  historicalPeak: 2,   coordinates: { x: 10, y: 20, radius: 4  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(50) },
+  { id: "dl-p1-phone-b",  name: "Phone Booth B",     shortName: "Ph. B",   category: "service", floor: "1F", capacity: 2,   currentOccupancy: 0,  wifiConnections: 0,   cvCount: 0,  waitTime: 0, isOpen: true,  historicalPeak: 2,   coordinates: { x: 10, y: 40, radius: 4  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(30) },
+  { id: "dl-p1-collab",   name: "Collab Zone",       shortName: "Collab",  category: "service", floor: "1F", capacity: 30,  currentOccupancy: 18, wifiConnections: 45,  cvCount: 16, waitTime: 0, isOpen: true,  historicalPeak: 50,  coordinates: { x: 75, y: 30, radius: 9  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(60) },
+
+  // Piso 3 — Innovation
+  { id: "dl-p3-lab",      name: "Innovation Lab",    shortName: "iLab",    category: "service", floor: "3F", capacity: 50,  currentOccupancy: 28, wifiConnections: 90,  cvCount: 25, waitTime: 0, isOpen: true,  historicalPeak: 80,  coordinates: { x: 35, y: 35, radius: 10 }, lng: -9.205325, lat: 38.662712, trend: generateTrend(56) },
+  { id: "dl-p3-design",   name: "Design Studio",     shortName: "Studio",  category: "service", floor: "3F", capacity: 25,  currentOccupancy: 12, wifiConnections: 40,  cvCount: 11, waitTime: 0, isOpen: true,  historicalPeak: 40,  coordinates: { x: 70, y: 35, radius: 8  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(48) },
+  { id: "dl-p3-lounge",   name: "Lounge",            shortName: "Lounge",  category: "food",    floor: "3F", capacity: 20,  currentOccupancy: 8,  wifiConnections: 25,  cvCount: 7,  waitTime: 0, isOpen: true,  historicalPeak: 30,  coordinates: { x: 50, y: 70, radius: 7  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(40) },
+
+  // Piso 4 — Meeting Rooms
+  { id: "dl-p4-room-a",   name: "Meeting Room A",    shortName: "Meet. A", category: "service", floor: "4F", capacity: 10,  currentOccupancy: 8,  wifiConnections: 18,  cvCount: 8,  waitTime: 0, isOpen: true,  historicalPeak: 10,  coordinates: { x: 20, y: 30, radius: 6  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(80) },
+  { id: "dl-p4-room-b",   name: "Meeting Room B",    shortName: "Meet. B", category: "service", floor: "4F", capacity: 8,   currentOccupancy: 2,  wifiConnections: 5,   cvCount: 2,  waitTime: 0, isOpen: true,  historicalPeak: 8,   coordinates: { x: 35, y: 30, radius: 6  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(25) },
+  { id: "dl-p4-room-c",   name: "Meeting Room C",    shortName: "Meet. C", category: "service", floor: "4F", capacity: 12,  currentOccupancy: 7,  wifiConnections: 14,  cvCount: 6,  waitTime: 0, isOpen: true,  historicalPeak: 12,  coordinates: { x: 50, y: 30, radius: 6  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(58) },
+  { id: "dl-p4-room-d",   name: "Boardroom D",       shortName: "Board.",  category: "service", floor: "4F", capacity: 20,  currentOccupancy: 16, wifiConnections: 32,  cvCount: 15, waitTime: 0, isOpen: true,  historicalPeak: 20,  coordinates: { x: 65, y: 30, radius: 8  }, lng: -9.205325, lat: 38.662712, trend: generateTrend(80) },
 ];
 
 // ── Accenture (Edifício 10, Lagoas Park) ────────────────────────────────────
@@ -82,11 +119,25 @@ export const LISBON_PUBLIC_ZONES: ZoneData[] = [
   { id: "alfama",        name: "Miradouro da Graça",      shortName: "Graça",     category: "outdoor", floor: "Exterior", capacity: 200, currentOccupancy: 145, wifiConnections:  55, cvCount: 138, waitTime:  0, isOpen: true, historicalPeak: 350, coordinates: { x: 57, y: 44, radius:  9 }, lng: -9.1280, lat: 38.7162, trend: generateTrend(72) },
 ];
 
-*/
+export function generateDailyForecast(baseOccupancy: number) {
+  const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+  const today = new Date().getDay(); // 0=Dom, 1=Seg...
+  return days.map((label, i) => ({
+    label,
+    isToday: i === (today === 0 ? 6 : today - 1),
+    peak: Math.round(Math.min(100, baseOccupancy + (Math.random() - 0.3) * 30)),
+    bestHour: Math.floor(Math.random() * 4) + 8, // entre 8h e 12h
+    hours: Array.from({ length: 16 }, (_, h) => ({
+      h: h + 7,
+      v: Math.min(1, Math.max(0.05,
+        (baseOccupancy / 100) + (Math.random() - 0.5) * 0.4 + Math.sin((h - 4) / 2.5) * 0.25
+      )),
+    })),
+  }));
+}
 
-/*export const ZONES_BY_CAMPUS: Record<string, ZoneData[]> = {
-  fct:       FCT_ZONES,
-  sbe:       SBE_ZONES,
+export const ZONES_BY_CAMPUS: Record<string, ZoneData[]> = {
+  fct:       [...FCT_ZONES, ...FCT_LIBRARY_ZONES, ...DELOITTE_ZONES.filter(z => /dl-p\d/.test(z.id))],  sbe:       SBE_ZONES,
   Deloitte:  DELOITTE_ZONES,
   Accenture: ACCENTURE_ZONES,
   lisbon:    LISBON_PUBLIC_ZONES,

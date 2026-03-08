@@ -10,9 +10,10 @@ interface ZoneCardProps {
   zone: ZoneData;
   isSelected: boolean;
   onClick: () => void;
+  floorSummary?: { label: string; pct: number }[];
 }
 
-export default function ZoneCard({ zone, isSelected, onClick }: ZoneCardProps) {
+export default function ZoneCard({ zone, isSelected, onClick, floorSummary }: ZoneCardProps) {
   const pct     = getOccupancyPercent(zone);
   const color   = getOccupancyColor(pct);
   const label   = getOccupancyLabel(pct);
@@ -78,6 +79,25 @@ export default function ZoneCard({ zone, isSelected, onClick }: ZoneCardProps) {
 
       {/* Sparkline */}
       <Sparkline data={zone.trend} color={color} height={28} width={156} />
+
+      {/* Indoor floor occupancy bars (e.g. library) */}
+      {floorSummary && floorSummary.length > 0 && (
+        <div style={{ marginTop: 8, borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 7 }}>
+          <div style={{ fontSize: 8, color: "var(--muted)", fontFamily: "var(--font-mono)", letterSpacing: "0.08em", marginBottom: 5 }}>PISOS</div>
+          {floorSummary.map(({ label, pct: p }) => {
+            const barColor = p < 40 ? "#00dc82" : p < 70 ? "#ffb400" : "#ff3c3c";
+            return (
+              <div key={label} style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 3 }}>
+                <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: "var(--muted)", width: 24, flexShrink: 0 }}>{label}</span>
+                <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.07)", borderRadius: 2, overflow: "hidden" }}>
+                  <div style={{ width: `${p}%`, height: "100%", background: barColor, borderRadius: 2, transition: "width 0.4s" }} />
+                </div>
+                <span style={{ fontSize: 9, fontFamily: "var(--font-mono)", color: barColor, width: 26, textAlign: "right", flexShrink: 0 }}>{p}%</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

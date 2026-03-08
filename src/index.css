@@ -33,6 +33,16 @@ body {
   overflow-x: hidden;
 }
 
+/* Mapbox — remove all seam lines (especially on mobile Safari) */
+.mapboxgl-canvas,
+.mapboxgl-map,
+.mapboxgl-canvas-container { display: block !important; outline: none !important; border: none !important; box-shadow: none !important; }
+.mapboxgl-ctrl-attrib,
+.mapboxgl-ctrl-attrib.mapboxgl-compact,
+.mapboxgl-ctrl-bottom-left,
+.mapboxgl-ctrl-bottom-right { background: transparent !important; box-shadow: none !important; border: none !important; }
+.mapboxgl-ctrl-logo { opacity: 0.35 !important; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }

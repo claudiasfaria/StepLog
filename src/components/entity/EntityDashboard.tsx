@@ -447,6 +447,7 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
       { id: "r4", zoneId: z[3]?.id ?? "", condition: "Occupancy < 20%",  action: "HVAC eco mode",             threshold: 20, enabled: false, triggered: false },
     ].filter(r => r.zoneId !== ""));
   }, [apiZones]);
+  const [showLibraryRooms, setShowLibraryRooms] = useState(false);
 
   const histData  = generateHistory(apiZones[0]?.id ?? "canteen", 7);
   const weekData  = generateWeeklyPattern();
@@ -524,8 +525,12 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
 
   const refresh = () => { setIsLoading(true); setTimeout(() => setIsLoading(false), 800); setLastUpdated(new Date()); };
 
-  const totalOcc = zones.reduce((a, z) => a + z.currentOccupancy, 0);
-  const totalCap = zones.reduce((a, z) => a + z.capacity, 0);
+  // Indoor dl-p* / fct-p* zones are only relevant inside the building view — exclude from lists/KPIs
+  const displayZones  = zones.filter(z => !/(?:dl|fct)-p\d/.test(z.id));
+  const libraryFloors = zones.filter(z => /fct-p\d/.test(z.id));
+
+  const totalOcc = displayZones.reduce((a, z) => a + z.currentOccupancy, 0);
+  const totalCap = displayZones.reduce((a, z) => a + z.capacity, 0);
   const campusPct = Math.round((totalOcc / totalCap) * 100);
 
   const triggerEmergency = () => {
@@ -622,6 +627,7 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
                   zones={zones}
                   selectedZoneId={selectedZoneId}
                   onZoneClick={(z) => setSelectedZoneId(id => id === z.id ? null : z.id)}
+                  onMapClick={() => setSelectedZoneId(null)}
                   mapConfig={mapConfig}
                 />
               </div>
@@ -661,15 +667,78 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
                 );
               })()}
 
-              {/* Responsive zone stat cards */}
+              {/* Responsive zone stat cards — or library drill-down */}
+              {showLibraryRooms ? (
+                <div>
+                  {/* ── Library rooms drill-down ── */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+                    <button
+                      onClick={() => { setShowLibraryRooms(false); setSelectedZoneId(null); }}
+                      style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--border)", borderRadius: 8, padding: "6px 12px", color: "var(--text)", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}
+                    >← Voltar</button>
+                    <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 15, color: "var(--text)" }}>Biblioteca – Salas</span>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))", gap: 10 }}>
+                    {libraryFloors.map(z => {
+                      const pct   = getOccupancyPercent(z);
+                      const color = getOccupancyColor(pct);
+                      return (
+                        <div
+                          key={z.id}
+                          onClick={() => setSelectedZoneId(id => id === z.id ? null : z.id)}
+                          style={{
+                            background: selectedZoneId === z.id ? `${color}10` : "var(--surface)",
+                            border: `1px solid ${selectedZoneId === z.id ? color + "50" : "var(--border)"}`,
+                            borderRadius: 14, padding: "14px 12px", cursor: "pointer",
+                            transition: "all 0.15s", display: "flex", flexDirection: "column", gap: 9,
+                            boxShadow: selectedZoneId === z.id ? `0 0 12px ${color}20` : "none",
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <span style={{ fontSize: 22 }}>{CATEGORY_EMOJI[z.category]}</span>
+                            <OccupancyRing pct={pct} color={color} size={38} />
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: 600, fontSize: 12, color: "var(--text)", marginBottom: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{z.name}</div>
+                            <div style={{ fontSize: 9, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{z.floor}</div>
+                          </div>
+                          <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 99, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, background: color, borderRadius: 99, transition: "width 1s", filter: `drop-shadow(0 0 3px ${color})` }} />
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 13, fontFamily: "var(--font-mono)", color, fontWeight: 700 }}>{pct}%</span>
+                            <span style={{ fontSize: 9, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{z.currentOccupancy}/{z.capacity}</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", paddingTop: 2, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                              <Icon d={ICONS.wifi} size={9} style={{ color: "var(--muted)" }} />
+                              <span style={{ fontSize: 9, color: "var(--muted)", fontFamily: "var(--font-mono)" }}>{z.wifiConnections}</span>
+                            </div>
+                            {z.waitTime > 0
+                              ? <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                                  <Icon d={ICONS.clock} size={9} style={{ color: "var(--orange)" }} />
+                                  <span style={{ fontSize: 9, color: "var(--orange)", fontFamily: "var(--font-mono)" }}>{z.waitTime}m</span>
+                                </div>
+                              : <span style={{ fontSize: 9, color: "var(--green)", fontFamily: "var(--font-mono)" }}>✓ free</span>
+                            }
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(148px, 1fr))", gap: 10 }}>
-                {zones.map(z => {
+                {displayZones.map(z => {
                   const pct   = getOccupancyPercent(z);
                   const color = getOccupancyColor(pct);
                   return (
                     <div
                       key={z.id}
-                      onClick={() => setSelectedZoneId(id => id === z.id ? null : z.id)}
+                      onClick={() => {
+                        if (z.id === "library") { setShowLibraryRooms(true); return; }
+                        setSelectedZoneId(id => id === z.id ? null : z.id);
+                      }}
                       style={{
                         background: selectedZoneId === z.id ? `${color}10` : "var(--surface)",
                         border: `1px solid ${selectedZoneId === z.id ? color + "50" : "var(--border)"}`,
@@ -710,6 +779,7 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
                   );
                 })}
               </div>
+              )}
             </div>
           )}
 
@@ -720,9 +790,9 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 10 }}>
                 <KpiCard label="Total Persons" value={totalOcc} icon={I.users} color="var(--cyan)" sub={`of ${totalCap} capacity`} />
                 <KpiCard label="Load" value={`${campusPct}%`} icon={I.activity} color="var(--purple)" sub={campusPct > 80 ? "⚠️ Near capacity" : "Nominal"} />
-                <KpiCard label="WiFi Devices" value={zones.reduce((a, z) => a + z.wifiConnections, 0)} icon={ICONS.wifi} color="var(--green)" />
-                <KpiCard label="Zones Open" value={`${zones.filter(z => z.isOpen).length}/${zones.length}`} icon={I.signal} color="var(--orange)" />
-                <KpiCard label="Avg Wait" value={`${Math.round(zones.reduce((a, z) => a + z.waitTime, 0) / zones.length)}m`} icon={ICONS.clock} color="var(--red)" />
+                <KpiCard label="WiFi Devices" value={displayZones.reduce((a, z) => a + z.wifiConnections, 0)} icon={ICONS.wifi} color="var(--green)" />
+                <KpiCard label="Zones Open" value={`${displayZones.filter(z => z.isOpen).length}/${displayZones.length}`} icon={I.signal} color="var(--orange)" />
+                <KpiCard label="Avg Wait" value={`${Math.round(displayZones.reduce((a, z) => a + z.waitTime, 0) / displayZones.length)}m`} icon={ICONS.clock} color="var(--red)" />
               </div>
 
               {/* Overview grid */}
@@ -732,16 +802,16 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
                   <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
                     {sectionTitle("Live Zone Status", I.bar, "var(--purple)")}
                   </div>
-                  {zones.map(z => <ZoneRow key={z.id} zone={z} />)}
+                  {displayZones.map(z => <ZoneRow key={z.id} zone={z} />)}
                 </div>
 
                 {/* Campus load bar chart */}
                 <div style={{ ...card() }}>
                   {sectionTitle("Occupancy by Zone", I.bar, "var(--cyan)")}
                   <BarGroup
-                    data={zones.map(z => ({ label: z.shortName, occ: getOccupancyPercent(z) }))}
+                    data={displayZones.map(z => ({ label: z.shortName, occ: getOccupancyPercent(z) }))}
                     keys={["occ"]}
-                    colors={zones.map(z => getOccupancyColor(getOccupancyPercent(z)))}
+                    colors={displayZones.map(z => getOccupancyColor(getOccupancyPercent(z)))}
                     height={160}
                   />
                   <div style={{ display: "flex", gap: 12, marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
@@ -953,7 +1023,7 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
                     </div>
                     <div style={{ fontFamily: "var(--font-mono)", fontSize: 22, fontWeight: 700, color: "var(--red)" }}>{totalOcc} <span style={{ fontSize: 11, color: "var(--muted)" }}>total</span></div>
                   </div>
-                  {zones.map(z => {
+                  {displayZones.map(z => {
                     const pct   = getOccupancyPercent(z);
                     const color = getOccupancyColor(pct);
                     return (
@@ -1051,7 +1121,7 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
 
                 {/* Per-zone climate cards */}
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 12 }}>
-                  {zones.map(z => {
+                  {displayZones.map(z => {
                     const pct = getOccupancyPercent(z);
                     const rec = getClimateRec(pct);
                     const occColor = getOccupancyColor(pct);
