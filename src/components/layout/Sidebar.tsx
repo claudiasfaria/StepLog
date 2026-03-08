@@ -7,7 +7,6 @@ const NAV = [
   { id: "map",       label: "Map",       Icon: Map             },
   { id: "analytics", label: "Analytics", Icon: BarChart3       },
   { id: "emergency", label: "Emergency", Icon: AlertTriangle   },
-  { id: "alerts",    label: "Climate",   Icon: Thermometer     },
 ];
 
 const DEFAULT_CAMPUS: CampusConfig = {

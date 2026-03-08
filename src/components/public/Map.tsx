@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
-import Map, { Layer } from "react-map-gl/mapbox";
+import { useState, useEffect, useRef, useMemo } from "react";
+import Map, { Layer, Source } from "react-map-gl/mapbox";
 import DeckGL from "@deck.gl/react";
 import { ScatterplotLayer } from "@deck.gl/layers";
 import "mapbox-gl/dist/mapbox-gl.css";
@@ -9,7 +9,7 @@ import { CampusMapConfig, DEFAULT_MAP_CONFIG } from "@/lib/clients";
 import FloorPlan from "@/components/public/FloorPlan";
 import { getOccupancyColor, getOccupancyPercent } from "@/lib/occupancy";
 
-const MAPBOX_TOKEN = "";
+const MAPBOX_TOKEN = "pk.eyJ1IjoiY3NmYXJpYTEzIiwiYSI6ImNtbWdldmV5aDBpbXQycnM1eTVqNmVoeWUifQ.ukaEAzJnuDc1ggD8m7sxxg ";
 
 // Converte cor hex "#rrggbb" → [r,g,b]
 function hexToRgb(hex: string): [number, number, number] {
@@ -120,19 +120,16 @@ export default function CampusMap3D({
     return nums;
   }, [coloredGeoJSON]);
 
-  // Reset activeFloor when campus/GeoJSON changes
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const { width, height } = entries[0].contentRect;
-      if (width > 0 && height > 0) setDims({ width, height });
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  const cfg = mapConfig ?? DEFAULT_MAP_CONFIG;
+  // ── Average occupancy % for a floor (used by floor selector) ─────────────
+  const floorAvgPct = (floor: number): number => {
+    if (!coloredGeoJSON) return 0;
+    const roomIds = coloredGeoJSON.features
+      .filter((f: any) => f.properties.type === "room" && f.properties.floor === floor)
+      .map((f: any) => f.properties.zone_id as string);
+    const floorZones = indoorZones.filter(z => roomIds.includes(z.id));
+    if (!floorZones.length) return 0;
+    return Math.round(floorZones.reduce((s, z) => s + getOccupancyPercent(z), 0) / floorZones.length);
+  };
 
   // zoomScale: ~1x at campus zoom 17, ~4.8x at city zoom 12.5 (sqrt keeps it sane)
   const zoomScale = Math.pow(2, Math.max(0, 17 - cfg.zoom) / 2);
@@ -220,54 +217,11 @@ export default function CampusMap3D({
     }),
   ];
 
-  const DEFAULT_VIEW: MapViewState = {
-    longitude: cfg.longitude,
-    latitude:  cfg.latitude,
-    zoom:      cfg.zoom,
-    pitch:     cfg.pitch  ?? 46,
-    bearing:   cfg.bearing ?? -20,
-  };
-
-  const [viewState, setViewState] = useState<MapViewState>(DEFAULT_VIEW);
-
   // Re-centre when campus changes (e.g. user switches account)
   useEffect(() => {
     setViewState(DEFAULT_VIEW);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfg.longitude, cfg.latitude]);
-
-  // ── Boost pitch when entering indoorMode so rooms look 3D ────────────────
-  const prevIndoorRef = useRef(false);
-  useEffect(() => {
-    if (indoorMode && !prevIndoorRef.current) {
-      setViewState(prev => ({
-        ...prev,
-        pitch: 68,
-        transitionDuration: 400,
-        transitionInterpolator: new FlyToInterpolator({ speed: 1.5 }),
-      } as any));
-    }
-    prevIndoorRef.current = indoorMode;
-  }, [indoorMode]);
-
-  // ── Room click via Mapbox queryRenderedFeatures ───────────────────────────
-  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!indoorMode) return;
-    const map = mapRef.current?.getMap?.();
-    if (!map) return;
-    const rect = (e.currentTarget as HTMLDivElement).getBoundingClientRect();
-    const features = map.queryRenderedFeatures(
-      [e.clientX - rect.left, e.clientY - rect.top],
-      { layers: ["ed4-rooms"] }
-    );
-    if (features?.length) {
-      const zone = zones.find(z => z.id === features[0].properties?.zone_id);
-      if (zone) onZoneClick?.(zone);
-      else onMapClick?.();
-    } else {
-      onMapClick?.();
-    }
-  };
 
   // ── Boost pitch when entering indoorMode so rooms look 3D ────────────────
   const prevIndoorRef = useRef(false);

@@ -142,4 +142,3 @@ export const ZONES_BY_CAMPUS: Record<string, ZoneData[]> = {
   Accenture: ACCENTURE_ZONES,
   lisbon:    LISBON_PUBLIC_ZONES,
 };
-*/
