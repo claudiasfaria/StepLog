@@ -10,13 +10,14 @@ export const CATEGORY_EMOJI: Record<string, string> = {
   lab:     "🔬",
   health:  "🏥",
 };
-
+/*
 function generateTrend(base: number) {
   return Array.from({ length: 12 }, (_, i) => ({
     time: `${i * 15}m`,
     predicted: Math.min(100, Math.max(5, base + (Math.random() - 0.5) * 20 + Math.sin(i / 3) * 10)),
   }));
 }
+
 
 // ── FCT NOVA (Caparica) ─────────────────────────────────────────────────────
 export const FCT_ZONES: ZoneData[] = [
@@ -81,27 +82,13 @@ export const LISBON_PUBLIC_ZONES: ZoneData[] = [
   { id: "alfama",        name: "Miradouro da Graça",      shortName: "Graça",     category: "outdoor", floor: "Exterior", capacity: 200, currentOccupancy: 145, wifiConnections:  55, cvCount: 138, waitTime:  0, isOpen: true, historicalPeak: 350, coordinates: { x: 57, y: 44, radius:  9 }, lng: -9.1280, lat: 38.7162, trend: generateTrend(72) },
 ];
 
-export function generateDailyForecast(baseOccupancy: number) {
-  const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-  const today = new Date().getDay(); // 0=Dom, 1=Seg...
-  return days.map((label, i) => ({
-    label,
-    isToday: i === (today === 0 ? 6 : today - 1),
-    peak: Math.round(Math.min(100, baseOccupancy + (Math.random() - 0.3) * 30)),
-    bestHour: Math.floor(Math.random() * 4) + 8, // entre 8h e 12h
-    hours: Array.from({ length: 16 }, (_, h) => ({
-      h: h + 7,
-      v: Math.min(1, Math.max(0.05,
-        (baseOccupancy / 100) + (Math.random() - 0.5) * 0.4 + Math.sin((h - 4) / 2.5) * 0.25
-      )),
-    })),
-  }));
-}
+*/
 
-export const ZONES_BY_CAMPUS: Record<string, ZoneData[]> = {
+/*export const ZONES_BY_CAMPUS: Record<string, ZoneData[]> = {
   fct:       FCT_ZONES,
   sbe:       SBE_ZONES,
   Deloitte:  DELOITTE_ZONES,
   Accenture: ACCENTURE_ZONES,
   lisbon:    LISBON_PUBLIC_ZONES,
 };
+*/

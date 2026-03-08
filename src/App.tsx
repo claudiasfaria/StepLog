@@ -4,15 +4,16 @@ import AuthPage from "@/components/AuthPage";
 import PublicDashboard from "@/components/public/PublicDashboard";
 import EntityDashboard from "@/components/entity/EntityDashboard";
 import StudentDashboard from "@/components/student/StudentDashboard";
-import { ADMIN_EMAILS } from "@/lib/clients";
+import { useAdminEmails } from "@/lib/api";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
+  const { data: adminEmails = [] } = useAdminEmails();
 
   if (!user) return <AuthPage onLogin={setUser} />;
 
   // O email determina automaticamente o papel: admins vão para EntityDashboard, todos os outros para StudentDashboard.
-  const isAdmin  = ADMIN_EMAILS.includes(user.email.toLowerCase());
+  const isAdmin  = adminEmails.includes(user.email.toLowerCase());
   if (isAdmin) return <EntityDashboard user={user} onLogout={() => setUser(null)} />;
 
   const isPublic = user.campus?.isPublic === true;

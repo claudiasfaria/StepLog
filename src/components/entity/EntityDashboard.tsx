@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { User, ZoneData } from "@/types/steplog";
-import { FCT_ZONES, ZONES_BY_CAMPUS, CATEGORY_EMOJI } from "@/data/mockData";
+import { CATEGORY_EMOJI } from "@/data/mockData";
+import { useZones, useMapConfig } from "@/lib/api";
 import { getOccupancyPercent, getOccupancyColor, getOccupancyLabel } from "@/lib/occupancy";
 import { Icon, ICONS } from "@/lib/icons";
-import { CAMPUS_MAP_CONFIG } from "@/lib/clients";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import CampusMap3D from "@/components/public/Map";
@@ -105,6 +105,302 @@ function BarGroup({ data, keys, colors, height = 80 }: { data: { label: string; 
 interface HvacZone { zoneId: string; name: string; enabled: boolean; mode: "auto" | "manual"; fanSpeed: number; autoThreshold: number; }
 interface AutoRule  { id: string; zoneId: string; condition: string; action: string; threshold: number; enabled: boolean; triggered: boolean; }
 
+// ─── CSV Export helper ────────────────────────────────────────────────────────
+/**
+ * Returns a human-readable "Best Time Window" string for a recommendation.
+ * Uses the zone's trend data (predicted %) to find the optimal hour slot,
+ * combined with day-of-week heuristics per campus type.
+ */
+function suggestTimeWindow(
+  zone: ZoneData,
+  nearby: ZoneData[],
+  isUniversity: boolean,
+  isCorporate: boolean,
+  isPublic: boolean,
+  purpose: "event" | "maintenance" | "immediate" | "energy" | "food"
+): string {
+  if (purpose === "immediate") return "Immediately";
+
+  // Day-of-week heuristics by campus type
+  const eventDays   = isPublic ? "Sat–Sun" : "Tue–Thu";
+  const opsDays     = isPublic ? "Daily"   : "Mon–Fri";
+
+  if (purpose === "food") return `${opsDays}, 11:30–14:00`;
+
+  if (purpose === "energy" || purpose === "maintenance") {
+    // Prefer the quietest hour in the zone's own trend (before 10:00 or after 20:00)
+    const offPeakSlots = zone.trend
+      .filter(pt => { const h = parseInt(pt.time, 10); return h <= 9 || h >= 20; })
+      .sort((a, b) => a.predicted - b.predicted);
+    if (offPeakSlots.length > 0) {
+      const h   = parseInt(offPeakSlots[0].time, 10);
+      const end = `${String(Math.min(h + 2, 23)).padStart(2, "0")}:00`;
+      return `${opsDays}, ${offPeakSlots[0].time}–${end}`;
+    }
+    return `${opsDays}, 07:00–09:00`;
+  }
+
+  // ── event ────────────────────────────────────────────────────────────────
+  // Score each time slot: want nearby zones BUSY but this zone NOT too full (< 70%)
+  const zoneTrend: Record<string, number> = {};
+  zone.trend.forEach(pt => { zoneTrend[pt.time] = pt.predicted; });
+
+  const nearbyScore: Record<string, number> = {};
+  nearby.forEach(o => o.trend.forEach(pt => {
+    nearbyScore[pt.time] = (nearbyScore[pt.time] ?? 0) + pt.predicted;
+  }));
+
+  // If no trend data at all, fall back to heuristic
+  const slots = Object.keys(nearbyScore).length > 0
+    ? Object.keys(nearbyScore)
+    : zone.trend.map(pt => pt.time);
+
+  const best = slots
+    .filter(t => (zoneTrend[t] ?? 100) < 70)
+    .sort((a, b) => (nearbyScore[b] ?? 0) - (nearbyScore[a] ?? 0))[0];
+
+  if (best) {
+    const h   = parseInt(best, 10);
+    const end = `${String(Math.min(h + 2, 22)).padStart(2, "0")}:00`;
+    return `${eventDays}, ${best}–${end}`;
+  }
+
+  // Ultimate fallback
+  return isPublic ? "Sat–Sun, 11:00–13:00" : "Tue–Thu, 11:00–13:00";
+}
+
+function generateOccupancyCSV(zones: ZoneData[], campusId: string, fromDate: Date, toDate: Date): string {
+  const msPerDay = 86_400_000;
+  const days: Date[] = [];
+  for (let d = new Date(fromDate); d <= toDate; d = new Date(d.getTime() + msPerDay))
+    days.push(new Date(d));
+
+  const slots = [8, 10, 12, 14, 16, 18, 20];
+  const isUniversity = ["fct", "sbe"].includes(campusId);
+  const isCorporate  = ["Deloitte", "Accenture"].includes(campusId);
+  const isPublic     = !isUniversity && !isCorporate;
+  const nowStr = new Date().toISOString().slice(0, 16).replace("T", " ") + " UTC";
+
+  // Header
+  const rows: string[][] = [[
+    "Date", "Time", "Zone ID", "Zone Name", "Category", "Floor",
+    "Capacity", "Occupancy", "Occupancy %", "WiFi Connections", "CV Count", "Wait Time (min)", "Status",
+  ]];
+
+  days.forEach(day => {
+    const dayOfWeek = day.getDay();
+    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+    slots.forEach(h => {
+      zones.forEach(z => {
+        const basePct    = isWeekend ? 0.25 : 0.55;
+        const peakBonus  = (h >= 11 && h <= 14) ? 0.25 : (h >= 17 && h <= 19) ? 0.15 : 0;
+        const jitter     = (Math.random() - 0.5) * 0.18;
+        const pct        = Math.min(1, Math.max(0.03, basePct + peakBonus + jitter));
+        const occ        = Math.round(pct * z.capacity);
+        const wifi       = Math.round(occ * 2.5 + Math.random() * 15);
+        const cv         = Math.round(occ * 0.88 + Math.random() * 8);
+        const wait       = h >= 12 && h <= 14 && z.category === "food" ? Math.round(Math.random() * 15 + 2) : 0;
+        rows.push([
+          day.toISOString().slice(0, 10),
+          `${String(h).padStart(2, "0")}:00`,
+          z.id, z.name, z.category, z.floor,
+          String(z.capacity), String(occ), `${Math.round(pct * 100)}%`,
+          String(wifi), String(cv), String(wait),
+          z.isOpen ? "Open" : "Closed",
+        ]);
+      });
+    });
+  });
+
+  // Blank separator + recommendations section
+  rows.push([]);
+  rows.push([`=== SMART RECOMMENDATIONS (generated at ${nowStr}) ===`]);
+  rows.push(["Priority", "Category", "Zone", "Title", "Issue", "Recommended Action", "Best Time Window", "KPI", "Generated At"]);
+
+  const PRIORITY_ORDER: Record<string, number> = { critical: 0, warning: 1, opportunity: 2, info: 3 };
+  const recs: string[][] = [];
+
+  zones.forEach(z => {
+    const pct = getOccupancyPercent(z);
+    if (pct >= 90 && z.isOpen)
+      recs.push(["CRITICAL", "Safety", z.name, `Critical capacity at ${z.name}`,
+        `${z.currentOccupancy}/${z.capacity} persons (${pct}%). Risk of overcrowding.`,
+        isUniversity ? "Display 'Zone full' on entrance screens. Alert on-duty staff."
+          : isCorporate ? "Restrict badge access until occupancy drops below 85%."
+          : "Activate pedestrian diversion. Alert security staff.",
+        suggestTimeWindow(z, [], isUniversity, isCorporate, isPublic, "immediate"),
+        `${pct}% occupancy`, nowStr]);
+    if (z.waitTime > 20)
+      recs.push(["CRITICAL", "Staff", z.name, `Queue alert — ${z.name}`,
+        `Current wait is ${z.waitTime} min. Users risk abandonment and crowd bottlenecks.`,
+        isCorporate ? "Open additional counter. Consider staggered access windows."
+          : "Offer timed entry or discount at nearby attraction to shift demand.",
+        suggestTimeWindow(z, [], isUniversity, isCorporate, isPublic, "immediate"),
+        `${z.waitTime} min wait`, nowStr]);
+    if (pct >= 75 && pct < 90 && z.isOpen) {
+      const alt = zones.find(o => o.id !== z.id && o.category === z.category && getOccupancyPercent(o) < 60);
+      recs.push(["WARNING", "Flow", z.name, `${z.name} filling up`,
+        `${pct}% and rising. ${alt ? `${alt.name} is at ${getOccupancyPercent(alt)}% — viable alternative.` : "No alternative identified."}`,
+        alt ? `Redirect users to ${alt.name} via app or entrance display.` : "Issue proactive alert. Brief staff to guide overflow.",
+        suggestTimeWindow(z, [], isUniversity, isCorporate, isPublic, "immediate"),
+        `${pct}% trend ↑`, nowStr]);
+    }
+    if (pct < 15 && z.isOpen)
+      recs.push(["OPPORTUNITY", "Energy", z.name, `Energy save — ${z.name} near empty`,
+        `Only ${z.currentOccupancy} of ${z.capacity} spots occupied. HVAC/lighting over-provisioned.`,
+        "Switch to eco mode: reduce HVAC to 30%. Estimated 40% energy reduction for this zone.",
+        suggestTimeWindow(z, [], isUniversity, isCorporate, isPublic, "energy"),
+        `${pct}% occupancy`, nowStr]);
+    if (isCorporate && pct < 35 && new Date().getDay() === 5)
+      recs.push(["OPPORTUNITY", "Space", z.name, `Friday under-use — ${z.name}`,
+        `${pct}% on Friday. HVAC, cleaning and security spending not justified.`,
+        "Close floor for maintenance. Concentrate staff in adjacent workspace.",
+        "Fridays, business hours",
+        `${pct}% on Friday`, nowStr]);
+  });
+
+  // ── Event recommendations ────────────────────────────────────────────────
+  // "Nearby busy zones" = any zone on the same floor OR (for outdoor) any zone
+  zones.forEach(z => {
+    if (!z.isOpen) return;
+    const pct = getOccupancyPercent(z);
+
+    // Nearby zones: same floor or, for outdoor zones, the whole campus
+    const nearbyBusy = zones.filter(o =>
+      o.id !== z.id && o.isOpen &&
+      (o.floor === z.floor || z.category === "outdoor") &&
+      getOccupancyPercent(o) >= 55
+    );
+    const nearbyTotal   = nearbyBusy.reduce((s, o) => s + o.currentOccupancy, 0);
+    const nearbyPreview = nearbyBusy.slice(0, 2).map(o => `${o.name} (${getOccupancyPercent(o)}%)`).join(", ");
+
+    // Good event spot: zone has room AND there is foot traffic nearby
+    if (pct >= 20 && pct <= 55 && nearbyBusy.length >= 1) {
+      const freeSpots = z.capacity - z.currentOccupancy;
+      recs.push(["OPPORTUNITY", "Events", z.name,
+        `Event opportunity — ${z.name}`,
+        `${z.name} is at ${pct}% (${freeSpots} free spots). Nearby active zones: ${nearbyPreview} — ${nearbyTotal} people within reach.`,
+        `Announce a pop-up event or activity at ${z.name} now. Promote via app push notification to users in: ${nearbyPreview}.`,
+        suggestTimeWindow(z, nearbyBusy, isUniversity, isCorporate, isPublic, "event"),
+        `${pct}% + ${nearbyTotal} nearby`, nowStr]);
+    }
+
+    // Bad event timing: zone quiet AND no one around to attend
+    if (pct < 20 && nearbyBusy.length === 0) {
+      const allNearby = zones.filter(o => o.id !== z.id && (o.floor === z.floor || z.category === "outdoor"));
+      const avgNearby = allNearby.length
+        ? Math.round(allNearby.reduce((s, o) => s + getOccupancyPercent(o), 0) / allNearby.length)
+        : 0;
+      recs.push(["INFO", "Events", z.name,
+        `Poor event timing — ${z.name}`,
+        `${z.name} is at ${pct}% and surrounding zones average only ${avgNearby}%. Events now will have minimal attendance.`,
+        "Reschedule to peak hours (typically 11:00–14:00 on weekdays) when foot traffic is highest.",
+        suggestTimeWindow(z, allNearby, isUniversity, isCorporate, isPublic, "event"),
+        `${pct}% zone / ${avgNearby}% area avg`, nowStr]);
+    }
+
+    // Maintenance/cleaning window: zone near-empty right now
+    if (pct < 15 && z.currentOccupancy <= 5) {
+      const hour = new Date().getHours();
+      const goodHour = hour >= 7 && hour <= 22;
+      recs.push(["OPPORTUNITY", "Operations", z.name,
+        `Maintenance window — ${z.name}`,
+        `Only ${z.currentOccupancy} people in ${z.name} right now. Minimal disruption if maintenance starts immediately.`,
+        goodHour
+          ? "Dispatch cleaning crew or technical team now. Target completion before next peak period."
+          : "Schedule overnight deep-clean or equipment servicing for this zone.",
+        suggestTimeWindow(z, [], isUniversity, isCorporate, isPublic, "maintenance"),
+        `${z.currentOccupancy} people present`, nowStr]);
+    }
+  });
+
+  // ── Food demand unmet ────────────────────────────────────────────────────
+  // Busy non-food zones with no adjacent open food zone → pop-up opportunity
+  const openFoodZones = zones.filter(z => z.category === "food" && z.isOpen);
+  zones.filter(z => z.category !== "food" && z.isOpen && getOccupancyPercent(z) >= 65)
+    .forEach(z => {
+      const hasFoodNearby = openFoodZones.some(f => f.floor === z.floor || getOccupancyPercent(z) >= 80);
+      if (!hasFoodNearby) {
+        recs.push(["WARNING", "Service", z.name,
+          `Food gap near ${z.name}`,
+          `${z.name} is at ${getOccupancyPercent(z)}% with no food service on the same floor. Demand likely unmet.`,
+          "Deploy a mobile food cart or vending service near the entrance of this zone.",
+          suggestTimeWindow(z, [], isUniversity, isCorporate, isPublic, "food"),
+          `${getOccupancyPercent(z)}% / no food nearby`, nowStr]);
+      }
+    });
+
+  // ── Consolidate & free a zone ────────────────────────────────────────────
+  // Two or more zones of the same category on the same floor both < 40% → merge
+  const seenConsolid = new Set<string>();
+  zones.forEach(z => {
+    if (!z.isOpen || getOccupancyPercent(z) >= 40 || seenConsolid.has(z.id)) return;
+    const twins = zones.filter(o =>
+      o.id !== z.id && o.isOpen && o.category === z.category &&
+      o.floor === z.floor && getOccupancyPercent(o) < 40 && !seenConsolid.has(o.id)
+    );
+    if (twins.length >= 1) {
+      seenConsolid.add(z.id);
+      twins.forEach(t => seenConsolid.add(t.id));
+      const twin = twins[0];
+      const combined = z.currentOccupancy + twin.currentOccupancy;
+      const wouldFit  = combined <= z.capacity;
+      recs.push(["OPPORTUNITY", "Events", `${z.name} / ${twin.name}`,
+        `Consolidate & free space — floor ${z.floor}`,
+        `${z.name} (${getOccupancyPercent(z)}%) and ${twin.name} (${getOccupancyPercent(twin)}%) are both low. Combined ${combined} people would ${wouldFit ? "fit in one zone" : "nearly fill one zone"}.`,
+        wouldFit
+          ? `Consolidate activity into ${z.name}. Free ${twin.name} for a pop-up event, exhibition, or deep-clean.`
+          : `Partially merge groups. Repurpose freed capacity in ${twin.name} for a structured activity or event.`,
+        suggestTimeWindow(z, zones.filter(o => o.floor === z.floor && o.id !== z.id && o.id !== twin.id), isUniversity, isCorporate, isPublic, "event"),
+        `${combined} combined / ${z.capacity} cap`, nowStr]);
+    }
+  });
+
+  // ── Campus-wide checks ───────────────────────────────────────────────────
+  const total = zones.reduce((a, z) => a + z.currentOccupancy, 0);
+  const cap   = zones.reduce((a, z) => a + z.capacity, 0);
+  const campP = cap > 0 ? Math.round((total / cap) * 100) : 0;
+
+  if (campP < 25)
+    recs.push(["OPPORTUNITY", "Energy", "Campus-wide", "Campus-wide energy save window",
+      `Overall load only ${campP}%. HVAC and lighting over-provisioned for current headcount.`,
+      "Activate global eco mode. Potential saving: up to 45%.",
+      isPublic ? "Daily, 22:00–07:00" : "Mon–Fri, 07:00–09:00",
+      `${campP}% overall`, nowStr]);
+
+  // Campus peak sweet-spot: 35–60% overall = ideal for large events
+  if (campP >= 35 && campP <= 60) {
+    const bestZone = zones
+      .filter(z => z.isOpen && getOccupancyPercent(z) >= 20 && getOccupancyPercent(z) <= 55)
+      .sort((a, b) => (b.capacity - b.currentOccupancy) - (a.capacity - a.currentOccupancy))[0];
+    const otherZones = bestZone ? zones.filter(z => z.id !== bestZone.id && z.isOpen) : zones;
+    recs.push(["OPPORTUNITY", "Events", bestZone ? bestZone.name : "Campus-wide",
+      "Campus event sweet-spot",
+      `Overall campus load is ${campP}% — enough people to ensure attendance, enough space to avoid overcrowding. Ideal conditions for a campus-wide event.`,
+      bestZone
+        ? `Best available venue: ${bestZone.name} (${getOccupancyPercent(bestZone)}%, ${bestZone.capacity - bestZone.currentOccupancy} free spots). Send push notification now to maximise reach.`
+        : "Announce a campus-wide activity or initiative now via the app notification system.",
+      bestZone
+        ? suggestTimeWindow(bestZone, otherZones, isUniversity, isCorporate, isPublic, "event")
+        : (isPublic ? "Sat–Sun, 11:00–13:00" : "Tue–Thu, 11:00–13:00"),
+      `${campP}% campus load`, nowStr]);
+  }
+
+  // Campus too crowded for new events
+  if (campP > 80)
+    recs.push(["WARNING", "Events", "Campus-wide",
+      "Campus too crowded for new events",
+      `Overall load at ${campP}%. Adding event foot traffic risks overcrowding common areas and corridors.`,
+      "Postpone any planned events. Focus on flow management and alternative exit routes.",
+      "Immediately",
+      `${campP}% overall`, nowStr]);
+
+  recs.sort((a, b) => (PRIORITY_ORDER[a[0].toLowerCase()] ?? 9) - (PRIORITY_ORDER[b[0].toLowerCase()] ?? 9));
+  recs.forEach(r => rows.push(r));
+
+  return rows.map(r => r.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+}
+
 function buildInitialHvac(zones: { id: string; name: string }[]): HvacZone[] {
   return zones.map((z, i) => ({
     zoneId:        z.id,
@@ -120,32 +416,39 @@ function buildInitialHvac(zones: { id: string; name: string }[]): HvacZone[] {
 interface EntityDashboardProps { user: User; onLogout: () => void; }
 
 export default function EntityDashboard({ user, onLogout }: EntityDashboardProps) {
-  const campusId     = user.campus?.id ?? "fct";
-  const initialZones = ZONES_BY_CAMPUS[campusId] ?? FCT_ZONES;
-  const mapConfig    = CAMPUS_MAP_CONFIG[campusId] ?? null;
+  const campusId = user.campus?.id ?? "fct";
+
+  const { data: apiZones = [] }    = useZones(campusId);
+  const { data: mapConfig = null } = useMapConfig(campusId);
 
   const [activeTab, setActiveTab]         = useState("overview");
   const [sidebarOpen, setSidebarOpen]     = useState(false);
-  const [zones, setZones]                 = useState<ZoneData[]>(initialZones);
+  const [zones, setZones]                 = useState<ZoneData[]>([]);
   const [lastUpdated, setLastUpdated]     = useState(new Date());
   const [isLoading, setIsLoading]         = useState(false);
-  const [hvac, setHvac]                   = useState<HvacZone[]>(() => buildInitialHvac(initialZones));
+  const [hvac, setHvac]                   = useState<HvacZone[]>([]);
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [emergencyActive, setEmergencyActive] = useState(false);
   const [reportGenerated, setReportGenerated] = useState(false);
   const [reportTime, setReportTime]       = useState<Date | null>(null);
   const [alerts, setAlerts]               = useState<string[]>([]);
-  const [autoRules, setAutoRules]         = useState<AutoRule[]>(() => {
-    const z = initialZones;
-    return [
+  const [autoRules, setAutoRules]         = useState<AutoRule[]>([]);
+
+  // Seed state once API data arrives
+  useEffect(() => {
+    if (apiZones.length === 0) return;
+    setZones(apiZones);
+    setHvac(buildInitialHvac(apiZones));
+    const z = apiZones;
+    setAutoRules([
       { id: "r1", zoneId: z[0]?.id ?? "", condition: "Occupancy ≥ 90%", action: "HVAC max + alert security", threshold: 90, enabled: true,  triggered: false },
       { id: "r2", zoneId: z[1]?.id ?? "", condition: "Occupancy ≥ 85%", action: "Alert staff + HVAC boost",  threshold: 85, enabled: true,  triggered: false },
       { id: "r3", zoneId: z[2]?.id ?? "", condition: "Wait time > 10m",  action: "Open extra window",         threshold: 10, enabled: true,  triggered: false },
       { id: "r4", zoneId: z[3]?.id ?? "", condition: "Occupancy < 20%",  action: "HVAC eco mode",             threshold: 20, enabled: false, triggered: false },
-    ].filter(r => r.zoneId !== "");
-  });
+    ].filter(r => r.zoneId !== ""));
+  }, [apiZones]);
 
-  const histData  = generateHistory(initialZones[0]?.id ?? "canteen", 7);
+  const histData  = generateHistory(apiZones[0]?.id ?? "canteen", 7);
   const weekData  = generateWeeklyPattern();
 
   // Season detection (auto from month, overridable)
@@ -156,6 +459,31 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
     return "transition";
   })();
   const [season, setSeason] = useState<"summer" | "winter" | "transition">(autoSeason);
+
+  // CSV export state
+  const today     = new Date().toISOString().slice(0, 10);
+  const sevenAgo  = new Date(Date.now() - 6 * 86_400_000).toISOString().slice(0, 10);
+  const [csvPreset,   setCsvPreset]   = useState<"7d" | "14d" | "30d" | "custom">("7d");
+  const [csvFrom,     setCsvFrom]     = useState(sevenAgo);
+  const [csvTo,       setCsvTo]       = useState(today);
+  const [csvExporting, setCsvExporting] = useState(false);
+
+  const handleCsvExport = () => {
+    setCsvExporting(true);
+    setTimeout(() => {
+      const from = new Date(csvFrom + "T00:00:00");
+      const to   = new Date(csvTo   + "T23:59:59");
+      const csv  = generateOccupancyCSV(zones, campusId, from, to);
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `steplog-occupancy-${campusId}-${csvFrom}_${csvTo}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setCsvExporting(false);
+    }, 400);
+  };
 
   useEffect(() => {
     const tick = () => {
@@ -435,6 +763,83 @@ export default function EntityDashboard({ user, onLogout }: EntityDashboardProps
           {/* ══ ANALYTICS ══════════════════════════════════════════════════════ */}
           {activeTab === "analytics" && (
             <div className="animate-fade-scale" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+
+              {/* ── CSV Export panel ── */}
+              <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 16, padding: 20 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+                  <Icon d={I.download} size={15} style={{ color: "var(--purple)" }} />
+                  <span style={{ fontFamily: "var(--font-display)", fontWeight: 700, fontSize: 14, color: "var(--text)" }}>Export Occupancy Report</span>
+                  <span style={{ fontSize: 10, color: "var(--muted)", marginLeft: 4 }}>· CSV with occupancy data + smart recommendations</span>
+                </div>
+
+                {/* Preset buttons */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 14 }}>
+                  {(["7d", "14d", "30d", "custom"] as const).map(p => {
+                    const labels = { "7d": "Last 7 days", "14d": "Last 14 days", "30d": "Last 30 days", "custom": "Custom range" };
+                    const active = csvPreset === p;
+                    return (
+                      <button key={p} onClick={() => {
+                        setCsvPreset(p);
+                        if (p !== "custom") {
+                          const daysBack = p === "7d" ? 6 : p === "14d" ? 13 : 29;
+                          setCsvFrom(new Date(Date.now() - daysBack * 86_400_000).toISOString().slice(0, 10));
+                          setCsvTo(new Date().toISOString().slice(0, 10));
+                        }
+                      }}
+                      style={{ padding: "5px 14px", borderRadius: 8, fontSize: 11, fontWeight: active ? 700 : 400, cursor: "pointer", fontFamily: "var(--font-mono)", transition: "all 0.15s",
+                        background: active ? "rgba(191,127,255,0.12)" : "transparent",
+                        border: `1px solid ${active ? "rgba(191,127,255,0.5)" : "var(--border)"}`,
+                        color: active ? "var(--purple)" : "var(--muted)" }}>
+                        {labels[p]}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Date pickers (always visible, editable in custom mode) */}
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-end", flexWrap: "wrap", marginBottom: 16 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <label style={{ fontSize: 9, color: "var(--muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.08em" }}>From</label>
+                    <input type="date" value={csvFrom} max={csvTo}
+                      onChange={e => { setCsvFrom(e.target.value); setCsvPreset("custom"); }}
+                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 10px", color: "var(--text)", fontSize: 12, fontFamily: "var(--font-mono)", colorScheme: "dark" }} />
+                  </div>
+                  <div style={{ fontSize: 12, color: "var(--muted)", paddingBottom: 8 }}>→</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    <label style={{ fontSize: 9, color: "var(--muted)", fontFamily: "var(--font-mono)", textTransform: "uppercase", letterSpacing: "0.08em" }}>To</label>
+                    <input type="date" value={csvTo} min={csvFrom} max={today}
+                      onChange={e => { setCsvTo(e.target.value); setCsvPreset("custom"); }}
+                      style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border)", borderRadius: 8, padding: "7px 10px", color: "var(--text)", fontSize: 12, fontFamily: "var(--font-mono)", colorScheme: "dark" }} />
+                  </div>
+
+                  <button onClick={handleCsvExport} disabled={csvExporting || !csvFrom || !csvTo}
+                    style={{ padding: "8px 20px", borderRadius: 10, border: "none", cursor: csvExporting ? "not-allowed" : "pointer", fontFamily: "var(--font-mono)", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", gap: 7, transition: "all 0.2s",
+                      background: csvExporting ? "rgba(191,127,255,0.15)" : "var(--purple)",
+                      color: csvExporting ? "var(--purple)" : "#0a0a14",
+                      opacity: !csvFrom || !csvTo ? 0.5 : 1 }}>
+                    <Icon d={I.download} size={13} />
+                    {csvExporting ? "Generating…" : "Download CSV"}
+                  </button>
+                </div>
+
+                {/* What's included */}
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  {[
+                    { icon: "📊", label: "Occupancy % per zone",        sub: "every 2-hour slot" },
+                    { icon: "📶", label: "WiFi + CV sensor data",        sub: "fused readings" },
+                    { icon: "⏱️", label: "Wait times",                   sub: "food zones" },
+                    { icon: "💡", label: "Smart recommendations",        sub: "auto-appended" },
+                  ].map(({ icon, label, sub }) => (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 12px", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                      <span style={{ fontSize: 14 }}>{icon}</span>
+                      <div>
+                        <div style={{ fontSize: 11, color: "var(--text)", fontWeight: 500 }}>{label}</div>
+                        <div style={{ fontSize: 9, color: "var(--muted)" }}>{sub}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
 
               {/* Sensor fusion explainer */}
               <div style={{ ...card(), background: "rgba(123,200,255,0.04)", borderColor: "rgba(123,200,255,0.15)" }}>

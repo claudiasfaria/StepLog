@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { User } from "@/types/steplog";
 import { Icon, ICONS } from "@/lib/icons";
-import { CAMPUSES, ENTERPRISE, LISBON_PUBLIC } from "@/lib/clients";
 import { AUTH_STYLES } from "./ui/authStyles";
+import { useCampuses } from "@/lib/api";
 
 
 interface AuthPageProps {
@@ -15,6 +15,8 @@ export default function AuthPage({ onLogin }: AuthPageProps) {
   const [showPwd,  setShowPwd]  = useState(false);
   const [error,    setError]    = useState("");
   const [loading,  setLoading]  = useState(false);
+
+  const { data: campusData } = useCampuses();
 
   useEffect(() => {
     const el = document.createElement("style");
@@ -29,8 +31,9 @@ const campus = useMemo(() => {
   const parts = email.split("@");
   if (parts.length < 2 || !parts[1]) return null;
   const domain = "@" + parts[1].toLowerCase();
-  return [...CAMPUSES, ...ENTERPRISE].find(c => c.domain === domain) ?? null;
-}, [email]);
+  const all = [...(campusData?.campuses ?? []), ...(campusData?.enterprise ?? [])];
+  return all.find(c => c.domain === domain) ?? null;
+}, [email, campusData]);
 
   const accentColor  = campus?.color    ?? "#7BC8FF";
   const accentRaw    = campus?.colorRaw ?? "123,200,255";
@@ -220,7 +223,7 @@ const campus = useMemo(() => {
               id: crypto.randomUUID(),
               email: "guest@steplog.app",
               role: "student",
-              campus: LISBON_PUBLIC,
+              campus: campusData?.public ?? null,
               name: "Visitante",
               rewardPoints: 0,
             })}

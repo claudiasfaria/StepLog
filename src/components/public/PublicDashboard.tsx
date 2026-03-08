@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { User, ZoneData } from "@/types/steplog";
-import { FCT_ZONES, ZONES_BY_CAMPUS, CATEGORY_EMOJI, generateDailyForecast } from "@/data/mockData";
-import { CAMPUS_MAP_CONFIG } from "@/lib/clients";
+import { CATEGORY_EMOJI } from "@/data/mockData";
+import { useZones, useMapConfig, useZoneForecast } from "@/lib/api";
 import { getOccupancyPercent, getOccupancyColor, getOccupancyLabel } from "@/lib/occupancy";
 import { Icon, ICONS } from "@/lib/icons";
 import ZoneCard from "@/components/public/ZoneCard";
@@ -17,19 +17,26 @@ interface StudentDashboardProps {
 }
 
 export default function StudentDashboard({ user, onLogout }: StudentDashboardProps) {
-  const campusId    = user.campus?.id ?? "fct";
-  const campusZones = ZONES_BY_CAMPUS[campusId] ?? FCT_ZONES;
-  const mapConfig   = CAMPUS_MAP_CONFIG[campusId] ?? null;
-  const isPublic    = user.campus?.isPublic === true;
+  const campusId  = user.campus?.id ?? "fct";
+  const isPublic  = user.campus?.isPublic === true;
+
+  const { data: campusZones = [] } = useZones(campusId);
+  const { data: mapConfig = null } = useMapConfig(campusId);
+
   const [forecastDay, setForecastDay] = useState<number | null>(null);
 
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
   const [activeTab, setActiveTab]           = useState<"map" | "stats">("map");
-  const [zones, setZones]                   = useState<ZoneData[]>(campusZones);
+  const [zones, setZones]                   = useState<ZoneData[]>([]);
   const [lastUpdated, setLastUpdated]       = useState<Date>(new Date());
   const [isLoading, setIsLoading]           = useState(false);
   const [searchQuery, setSearchQuery]       = useState("");
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
+
+  // Seed local zones state once API data arrives
+  useEffect(() => {
+    if (campusZones.length > 0) setZones(campusZones);
+  }, [campusZones]);
 
   // Live simulation
   useEffect(() => {
@@ -51,8 +58,13 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
     return () => clearInterval(id);
   }, []);
 
-  const selectedZone    = zones.find(z => z.id === selectedZoneId);
-  const zoneRefs        = useRef<Record<string, HTMLDivElement | null>>({});
+  const selectedZone = zones.find(z => z.id === selectedZoneId);
+  const { data: zoneForecast = [] } = useZoneForecast(campusId, selectedZoneId);
+
+  // Reset forecast day selection when zone changes
+  useEffect(() => { setForecastDay(null); }, [selectedZoneId]);
+
+  const zoneRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Auto-scroll to the zone card when a zone is selected on the map
   useEffect(() => {
@@ -191,7 +203,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 <div style={{ padding: "0 16px 12px" }}>
   {/* Day selector */}
   <div style={{ display: "flex", gap: 4, marginBottom: 10, overflowX: "auto" }}>
-    {generateDailyForecast(getOccupancyPercent(selectedZone)).map((day, i) => (
+    {zoneForecast.map((day, i) => (
       <button
         key={i}
         onClick={() => setForecastDay(forecastDay === i ? null : i)}
@@ -221,7 +233,7 @@ export default function StudentDashboard({ user, onLogout }: StudentDashboardPro
 
   {/* Bars — hoje ou dia selecionado */}
   {(() => {
-    const forecast = generateDailyForecast(getOccupancyPercent(selectedZone));
+    const forecast = zoneForecast;
     const dayData  = forecastDay !== null ? forecast[forecastDay] : null;
     const bars     = dayData ? dayData.hours : hourly.slice(7, 23).map((v, i) => ({ h: i + 7, v }));
     const isFuture = forecastDay !== null;
