@@ -7,7 +7,7 @@ import { MapViewState, FlyToInterpolator } from "@deck.gl/core";
 import { ZoneData } from "@/types/steplog";
 import { CampusMapConfig, DEFAULT_MAP_CONFIG } from "@/lib/clients";
 
-const MAPBOX_TOKEN = "pk.eyJ1IjoiY3NmYXJpYTEzIiwiYSI6ImNtbWdldmV5aDBpbXQycnM1eTVqNmVoeWUifQ.ukaEAzJnuDc1ggD8m7sxxg";
+const MAPBOX_TOKEN = "";
 
 export default function CampusMap3D({
   zones,
