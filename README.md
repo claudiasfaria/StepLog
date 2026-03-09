@@ -61,95 +61,66 @@ Built for a hackathon demo, it supports multiple institutions with branded exper
 
 ---
 
-## Getting Started
+
+## ⚡ Running the Project
 
 ### Frontend
-
 ```bash
 npm install
 npm run dev
 ```
+Open `http://localhost:5173` in your browser.
 
-### Backend
-
+### Backend *(optional — the demo works without it)*
 ```bash
 python -m venv venv
 source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 flask run
 ```
-
-O servidor Flask corre em `http://localhost:5000` por defeito.  
-O Vite dev server faz proxy automático de `/api/*` para o Flask.
+The Flask server runs on `http://localhost:5000`. Vite automatically proxies `/api/*` requests.
 
 ---
 
-## Estrutura do Projecto
+## 🗝️ Mapbox API Key
 
+The token is **hardcoded in `src/components/public/Map.tsx`** — no `.env` file is needed. The 3D map works out of the box.
+
+```ts
+// src/components/public/Map.tsx — line ~10
+const MAPBOX_TOKEN = "pk.eyJ1IjoiY3NmYXJpYTEzI...";
 ```
-steplog/
-├── public/
-│   └── demo-office.geojson       # 3D building GeoJSON (Edifício 4)
-├── src/
-│   ├── components/
-│   │   ├── AuthPage.tsx
-│   │   ├── student/
-│   │   │   ├── StudentDashboard.tsx
-│   │   │   └── ZoneCard.tsx
-│   │   ├── public/
-│   │   │   ├── PublicDashboard.tsx
-│   │   │   ├── Map.tsx               # Mapbox + DeckGL + GeoJSON
-│   │   │   ├── FloorPlan.tsx         # SVG indoor floor plan
-│   │   │   └── ZoneCard.tsx
-│   │   ├── entity/
-│   │   │   └── EntityDashboard.tsx
-│   │   └── ui/
-│   │       ├── OccupancyRing.tsx
-│   │       └── Sparkline.tsx
-│   ├── data/
-│   │   └── mockData.ts
-│   ├── lib/
-│   │   ├── clients.ts
-│   │   ├── occupancy.ts
-│   │   ├── hourlyPattern.ts
-│   │   └── icons.ts
-│   ├── styles/
-│   │   └── auth.ts
-│   └── types/
-│       └── steplog.ts
-├── backend/
-│   ├── app.py                    # Flask entry point
-│   ├── routes/
-│   │   ├── zones.py              # GET /api/zones/:campus
-│   │   └── occupancy.py          # GET /api/occupancy/:zone_id
-│   └── data/
-│       └── mock_zones.py         # Mock sensor data
-├── requirements.txt
-└── README.md
-```
+
+> If the map fails to load, the token may have expired — please contact the team.
 
 ---
 
-## Demo Accounts
+## 🔐 Demo Accounts
 
-| Email | Instituição | Role |
+| Email | Institution | View |
 |---|---|---|
-| `nome@fct.unl.pt` | FCT NOVA | Student |
-| `nome@sbe.unl.pt` | Nova SBE | Student |
-| `nome@deloitte.pt` | Deloitte | Employee |
-| `nome@accenture.pt` | Accenture | Employee |
-| *(guest button)* | Lisboa Pública | Guest |
+| `name@fct.unl.pt` | FCT NOVA | University campus |
+| `name@sbe.unl.pt` | Nova SBE | Carcavelos campus |
+| `name@deloitte.pt` | Deloitte | Lagoas Park office |
+| `name@accenture.pt` | Accenture | Lagoas Park office |
+| `admin@deloitte.pt` | Deloitte Admin | Management dashboard |
+| *(button "Enter as Guest")* | Lisboa Public | Tourist spots |
 
-Qualquer password com 4+ caracteres funciona.
+> Any password with **4+ characters** works.
 
 ---
 
-## Data Model
+## 🔬 Data Model
 
-Todos os dados são simulados para a demo. Em produção, `ZoneData` seria alimentado por:
-- **WiFi probes** — contagem de ligações por access point
-- **Computer vision** — contagem de pessoas via câmeras no tecto (Raspberry Pi)
-- **Calendar APIs** — para salas de reunião e eventos
+In production, data would come from passive sensors:
+
+| Source | Method |
+|---|---|
+| 📶 WiFi probes | Device count per access point |
+| 📷 Computer Vision | Raspberry Pi with ceiling camera |
+| 📅 Calendar APIs | Meeting rooms and events |
+
+For this demo, everything is simulated via `mockData.ts` with an 8s tick.
 
 ```ts
 interface ZoneData {
@@ -157,18 +128,19 @@ interface ZoneData {
   capacity, currentOccupancy
   wifiConnections, cvCount
   waitTime, isOpen
-  lng, lat          // posição no mapa
-  trend             // sparkline de 12 pontos
+  lng, lat     // map position
+  trend        // 12-point sparkline
 }
 ```
 
 ---
 
-## Contexto Hackathon
+## Hackathon Context
 
-O StepLog demonstra como **dados passivos de sensores** (WiFi + CV) podem ser transformados em inteligência de ocupação accionável — reduzindo deslocações desnecessárias, tempos de espera e fadiga de decisão para estudantes e colaboradores.
+StepLog demonstrates how **passive sensor data** (WiFi + CV) can be transformed into actionable occupancy intelligence — reducing unnecessary trips, wait times and decision fatigue for students and employees.
 
-A plataforma é **agnóstica à instituição**: qualquer campus ou escritório pode ser integrado adicionando um `CampusConfig`, um conjunto de `ZoneData`, e opcionalmente um ficheiro GeoJSON do edifício.
+The platform is **institution-agnostic**: any campus or office can be onboarded by adding a `CampusConfig`, a set of `ZoneData` records, and optionally a GeoJSON building file.
+
 
 ---
 
