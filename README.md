@@ -34,7 +34,7 @@ Built for a hackathon demo, it supports multiple institutions with branded exper
 | Institution | Type | Accent |
 |---|---|---|
 | FCT NOVA | University | Blue `#7BC8FF` |
-| Nova SBE | Business School | Amber `#F5A623` |
+| Nova SBE | University | Amber `#F5A623` |
 | Deloitte | Enterprise | Green `#00a332` |
 | Accenture | Enterprise | Purple `#7500c0` |
 | Lisboa Pública | Public / Guest | Orange `#FFB347` |
